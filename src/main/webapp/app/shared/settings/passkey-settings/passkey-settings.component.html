@@ -21,6 +21,11 @@
           <p class="font-medium text-text-primary" jhiTranslate="settings.passkeys.unavailable.title"></p>
           <p class="mt-2 text-sm text-text-secondary" jhiTranslate="settings.passkeys.unavailable.description"></p>
         </div>
+      } @else if (loadFailed()) {
+        <div class="rounded-xl border border-border-default bg-background-surface px-4 py-5">
+          <p class="font-medium text-text-primary" jhiTranslate="settings.passkeys.error.title"></p>
+          <p class="mt-2 text-sm text-text-secondary" jhiTranslate="settings.passkeys.error.description"></p>
+        </div>
       } @else if (!hasPasskeys()) {
         <div class="rounded-xl border border-dashed border-border-default bg-background-surface px-4 py-5">
           <p class="font-medium text-text-primary" jhiTranslate="settings.passkeys.empty.title"></p>

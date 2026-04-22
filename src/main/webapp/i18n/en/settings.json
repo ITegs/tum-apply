@@ -121,6 +121,10 @@
         "title": "No passkeys yet",
         "description": "Create a passkey to sign in faster and more securely next time."
       },
+      "error": {
+        "title": "Could not load passkeys",
+        "description": "We couldn't load your passkeys right now. Please try again in a moment."
+      },
       "unavailable": {
         "title": "Passkey management unavailable",
         "description": "Sign in with Keycloak SSO to create, view, or remove passkeys for this account."

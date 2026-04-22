@@ -17,6 +17,7 @@ import { PasskeyCredentialSummary } from 'app/core/auth/models/auth.model';
 export class PasskeySettingsComponent {
   readonly passkeys = signal<PasskeyCredentialSummary[]>([]);
   readonly loaded = signal(false);
+  readonly loadFailed = signal(false);
   readonly creating = signal(false);
   readonly removingId = signal<string | null>(null);
   readonly canManagePasskeys = signal(false);
@@ -94,13 +95,17 @@ export class PasskeySettingsComponent {
   private async loadPasskeys(): Promise<void> {
     if (!this.canManagePasskeys()) {
       this.passkeys.set([]);
+      this.loadFailed.set(false);
       this.loaded.set(true);
       return;
     }
 
+    this.loadFailed.set(false);
     try {
       this.passkeys.set(await this.keycloakAuthenticationService.listPasskeys());
     } catch {
+      this.passkeys.set([]);
+      this.loadFailed.set(true);
       this.toastService.showErrorKey('settings.passkeys.loadFailed');
     } finally {
       this.loaded.set(true);

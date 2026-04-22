@@ -121,6 +121,10 @@
         "title": "Noch keine Passkeys",
         "description": "Erstelle einen Passkey, um dich beim nächsten Mal schneller und sicherer anzumelden."
       },
+      "error": {
+        "title": "Passkeys konnten nicht geladen werden",
+        "description": "Deine Passkeys konnten gerade nicht geladen werden. Bitte versuche es in einem Moment erneut."
+      },
       "unavailable": {
         "title": "Passkey-Verwaltung nicht verfügbar",
         "description": "Melde dich mit Keycloak SSO an, um Passkeys für dieses Konto zu erstellen, anzusehen oder zu entfernen."
