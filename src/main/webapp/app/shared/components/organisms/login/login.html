@@ -4,6 +4,21 @@
 <div class="login-content">
   <div class="login-panel">
     @if (this.authOrchestrator.loginStep() !== 'otp') {
+      <section class="passkey-login-section">
+        <div class="login-passkey-actions">
+          <jhi-button
+            [shouldTranslate]="true"
+            [disabled]="authOrchestrator.isBusy()"
+            [loading]="authOrchestrator.isBusy()"
+            [fullWidth]="true"
+            label="auth.passkey.buttons.passkey"
+            icon="lock"
+            severity="primary"
+            variant="outlined"
+            (click)="signInWithPasskey()"
+          />
+        </div>
+      </section>
       <jhi-credentials-group
         [secondButtonHandler]="secondButtonHandler"
         [showPassword]="showPassword()"

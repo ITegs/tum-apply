@@ -181,3 +181,6 @@ storage
 # OpenAPI generator subproject build artifacts
 openapi-generator-angular21/build/
 openapi-generator-angular21/.gradle/
+
+# Keep the custom keycloak passkey extension for local development
+!docker/local-setup/realm-config/providers/custom-endpoint-1.0-SNAPSHOT.jar

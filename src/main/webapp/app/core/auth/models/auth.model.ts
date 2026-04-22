@@ -18,6 +18,12 @@ export interface AuthOpenOptions {
   redirectUri?: string;
 }
 
+export interface PasskeyCredentialSummary {
+  id: string;
+  label: string | null;
+  createdDate: number | null;
+}
+
 // Substates within the login flow:
 // - 'email'    : user enters their email (decides between password or OTP)
 // - 'password' : user is prompted for their password

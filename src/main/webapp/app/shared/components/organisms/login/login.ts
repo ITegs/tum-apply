@@ -40,6 +40,10 @@ export class Login {
     this.authOrchestrator.previousStep();
   };
 
+  async signInWithPasskey(): Promise<void> {
+    await this.authFacade.loginWithPasskey(this.redirectUri());
+  }
+
   onEmailLogin = async (email: string, password?: string): Promise<boolean> => {
     if (password == null || password.trim() === '') {
       return false;
@@ -53,4 +57,13 @@ export class Login {
     }
     return response;
   };
+
+  private redirectUri(): string {
+    return this.authOrchestrator.redirectUri() ?? this.currentRelativeUrl();
+  }
+
+  private currentRelativeUrl(): string {
+    const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return url === '' ? '/' : url;
+  }
 }

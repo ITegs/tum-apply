@@ -110,6 +110,38 @@
         "rotate": "Rotate"
       }
     },
+    "passkeys": {
+      "header": "Passkeys",
+      "description": "Create and manage the passkeys linked to your TUMApply account.",
+      "actions": {
+        "create": "Create passkey"
+      },
+      "createdAt": "Created {{date}}",
+      "empty": {
+        "title": "No passkeys yet",
+        "description": "Create a passkey to sign in faster and more securely next time."
+      },
+      "unavailable": {
+        "title": "Passkey management unavailable",
+        "description": "Sign in with Keycloak SSO to create, view, or remove passkeys for this account."
+      },
+      "removeConfirm": {
+        "header": "Remove passkey?",
+        "message": "Are you sure you want to remove {{name}}?"
+      },
+      "removed": {
+        "summary": "Passkey removed",
+        "detail": "The passkey was removed successfully."
+      },
+      "removeFailed": {
+        "summary": "Removal failed",
+        "detail": "Failed to remove the passkey. Please try again."
+      },
+      "loadFailed": {
+        "summary": "Load failed",
+        "detail": "Failed to load your passkeys. Please try again."
+      }
+    },
     "aiFeatures": {
       "header": "AI Features",
       "description": "Control whether AI-powered features are enabled for your account.",

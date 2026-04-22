@@ -173,6 +173,40 @@ export class AuthFacadeService {
     );
   }
 
+  // --------------- Passkey ---------------
+  /**
+   * Logs in via WebAuthn passkey on Keycloak.
+   * Note: This passkey flow needs a custom Keycloak SPI endpoint and won't work with a standard Keycloak setup out-of-the-box.
+   * @param redirectUri optional post-login redirect URI to be set before initiating the flow
+   */
+  async loginWithPasskey(redirectUri?: string): Promise<void> {
+    if (redirectUri != null && redirectUri.trim() !== '') {
+      this.authOrchestrator.redirectUri.set(redirectUri);
+    }
+    return this.runAuthAction(
+      async () => {
+        await this.keycloakAuthenticationService.loginWithPasskey(this.authOrchestrator.redirectUri() ?? undefined);
+      },
+      {
+        summary: this.translate.instant(`${this.translationKey}.passkeyLoginFailed.summary`),
+        detail: this.translate.instant(`${this.translationKey}.passkeyLoginFailed.detail`),
+      },
+    );
+  }
+
+  async registerPasskey(): Promise<void> {
+    return this.runAuthAction(
+      async () => {
+        await this.keycloakAuthenticationService.registerPasskey();
+        this.toastService.showSuccessKey(`${this.translationKey}.passkeyRegistered`);
+      },
+      {
+        summary: this.translate.instant(`${this.translationKey}.passkeyRegisterFailed.summary`),
+        detail: this.translate.instant(`${this.translationKey}.passkeyRegisterFailed.detail`),
+      },
+    );
+  }
+
   // --------------- IdPs ---------------
   /**
    * Logs in via a Keycloak identity provider.

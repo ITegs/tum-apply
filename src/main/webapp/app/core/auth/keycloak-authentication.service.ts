@@ -5,11 +5,40 @@ import { environment } from 'app/environments/environment';
 import { ToastService } from 'app/service/toast-service';
 import { TranslateService } from '@ngx-translate/core';
 
+import { PasskeyCredentialSummary } from './models/auth.model';
+
 export enum IdpProvider {
   Google = 'google',
   Microsoft = 'microsoft',
   Apple = 'apple',
   TUM = 'tum',
+}
+
+interface PasskeyChallengeResponse {
+  challenge?: string;
+  credentialId?: string;
+  error?: string;
+}
+
+interface AccountCredentialTypeResponse {
+  type?: string;
+  userCredentialMetadatas?:
+    | {
+        credential?: {
+          id?: string | null;
+          name?: string | null;
+          userLabel?: string | null;
+          createdDate?: number | null;
+        } | null;
+      }[]
+    | null;
+}
+
+interface AccountCredentialResponse {
+  id?: string | null;
+  name?: string | null;
+  userLabel?: string | null;
+  createdDate?: number | null;
 }
 
 /**
@@ -32,6 +61,8 @@ export enum IdpProvider {
  */
 @Injectable({ providedIn: 'root' })
 export class KeycloakAuthenticationService {
+  private static readonly PASSKEY_CREDENTIAL_TYPES = new Set(['webauthn-passwordless', 'webauthn']);
+
   readonly config = inject(ApplicationConfigService);
   private readonly toastService = inject(ToastService);
   private readonly translate = inject(TranslateService);
@@ -103,6 +134,7 @@ export class KeycloakAuthenticationService {
   /**
    * Triggers the Keycloak login flow for a specific identity provider.
    * Optionally redirects to the specified URI after login.
+   * Note: The `TUM` provider is for development the default keycloak login
    *
    * @param provider The identity provider to use for login.
    * @param redirectUri Optional URI to redirect to after login. Defaults to the app root.
@@ -135,6 +167,158 @@ export class KeycloakAuthenticationService {
     this.stopTokenRefreshScheduler();
     if (this.keycloak?.authenticated === true) {
       await this.keycloak.logout({ redirectUri: this.buildRedirectUri(redirectUri) });
+    }
+  }
+
+  // --------------------------- Passkey ----------------------------
+
+  async loginWithPasskey(redirectUri?: string): Promise<void> {
+    this.assertPasskeySupport();
+
+    const challenge = await this.getPasskeyChallenge();
+    const allowCredentialId = challenge.credentialId != null && challenge.credentialId.trim() !== '' ? challenge.credentialId : undefined;
+    const assertion = (await navigator.credentials.get({
+      publicKey: {
+        challenge: this.fromBase64Url(challenge.challenge),
+        ...(allowCredentialId != null ? { allowCredentials: [{ type: 'public-key', id: this.fromBase64Url(allowCredentialId) }] } : {}),
+        userVerification: 'preferred',
+      },
+    })) as PublicKeyCredential | null;
+    const response = assertion?.response;
+
+    if (assertion?.rawId == null || !(response instanceof AuthenticatorAssertionResponse)) {
+      throw new Error('Incomplete passkey authentication assertion');
+    }
+
+    const authenticateResponse = await fetch(this.getPasskeyEndpoint('authenticate'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        credentialId: this.toBase64Url(assertion.rawId),
+        rawId: this.toBase64Url(assertion.rawId),
+        clientDataJSON: this.toBase64Url(response.clientDataJSON),
+        authenticatorData: this.toBase64Url(response.authenticatorData),
+        signature: this.toBase64Url(response.signature),
+        challenge: challenge.challenge,
+      }),
+    });
+    const authenticatePayload = await this.parseJsonResponse<{ error?: string }>(authenticateResponse);
+
+    if (!authenticateResponse.ok) {
+      throw new Error(this.getErrorMessage(authenticatePayload.error, `Passkey auth failed: ${authenticateResponse.status}`));
+    }
+
+    window.location.replace(this.buildRedirectUri(redirectUri));
+  }
+
+  async registerPasskey(): Promise<void> {
+    this.assertPasskeySupport();
+
+    const token = await this.getAuthenticatedToken();
+    const claims = (this.keycloak?.tokenParsed ?? {}) as Record<string, unknown>;
+    const accountId = this.getFirstNonEmptyString(claims.sub, claims.preferred_username) ?? '';
+    const accountName = this.getFirstNonEmptyString(claims.preferred_username, claims.email) ?? '';
+    const displayName = this.getFirstNonEmptyString(claims.name, accountName) ?? 'Keycloak User';
+
+    if (accountId === '' || accountName === '') {
+      throw new Error('Missing user identity claims for passkey registration');
+    }
+
+    const challenge = await this.getPasskeyChallenge();
+    const userIdBytes = new Uint8Array(new TextEncoder().encode(accountId).slice(0, 64));
+    const credential = (await navigator.credentials.create({
+      publicKey: {
+        challenge: this.fromBase64Url(challenge.challenge),
+        rp: { name: 'TUMApply', id: window.location.hostname },
+        user: { id: userIdBytes.buffer, name: accountName, displayName },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+        authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
+        attestation: 'none',
+      },
+    })) as PublicKeyCredential | null;
+    const response = credential?.response;
+
+    if (credential?.rawId == null || !(response instanceof AuthenticatorAttestationResponse)) {
+      throw new Error('Incomplete passkey registration credential');
+    }
+
+    const saveResponse = await fetch(this.getPasskeyEndpoint('save'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        credentialId: this.toBase64Url(credential.rawId),
+        rawId: this.toBase64Url(credential.rawId),
+        clientDataJSON: this.toBase64Url(response.clientDataJSON),
+        attestationObject: this.toBase64Url(response.attestationObject),
+        challenge: challenge.challenge,
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      const responseText = await saveResponse.text();
+      throw new Error(responseText.trim() !== '' ? responseText : `Passkey save failed: ${saveResponse.status}`);
+    }
+  }
+
+  async listPasskeys(): Promise<PasskeyCredentialSummary[]> {
+    const token = await this.getAuthenticatedToken();
+    const response = await fetch(this.getAccountCredentialsEndpoint(), {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const payload = await this.parseJsonResponse<
+      AccountCredentialTypeResponse[] | { credentials?: AccountCredentialResponse[]; error?: string }
+    >(response);
+
+    if (!response.ok) {
+      const payloadError = !Array.isArray(payload) ? payload.error : undefined;
+      throw new Error(this.getErrorMessage(payloadError, `Failed to load passkeys: ${response.status}`));
+    }
+
+    const credentials: AccountCredentialResponse[] = Array.isArray(payload)
+      ? payload.flatMap(credentialType => {
+          const type = (credentialType.type ?? '').toLowerCase();
+          if (!KeycloakAuthenticationService.PASSKEY_CREDENTIAL_TYPES.has(type)) {
+            return [];
+          }
+
+          return (credentialType.userCredentialMetadatas ?? []).flatMap(metadata =>
+            metadata.credential != null ? [metadata.credential] : [],
+          );
+        })
+      : (payload.credentials ?? []);
+
+    return credentials
+      .map(credential => ({
+        id: credential.id?.trim() ?? '',
+        label: credential.name ?? credential.userLabel ?? null,
+        createdDate: credential.createdDate ?? null,
+      }))
+      .filter(credential => credential.id !== '');
+  }
+
+  async removePasskey(id: string): Promise<void> {
+    const token = await this.getAuthenticatedToken();
+    const response = await fetch(`${this.getAccountCredentialsEndpoint()}/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const payload = await this.parseJsonResponse<{ error?: string }>(response);
+
+    if (!response.ok) {
+      throw new Error(this.getErrorMessage(payload.error, `Failed to remove passkey: ${response.status}`));
     }
   }
 
@@ -240,6 +424,83 @@ export class KeycloakAuthenticationService {
       window.removeEventListener('online', this.onOnline);
     }
     this.windowListenersActive = false;
+  }
+
+  private assertPasskeySupport(): void {
+    if (typeof PublicKeyCredential === 'undefined') {
+      throw new Error('Passkeys are not supported in this browser');
+    }
+  }
+
+  private async getAuthenticatedToken(): Promise<string> {
+    await this.ensureFreshToken();
+    const token = this.keycloak?.token;
+    if (token == null || token.trim() === '') {
+      throw new Error('Keycloak user is not authenticated');
+    }
+    return token;
+  }
+
+  private async getPasskeyChallenge(): Promise<Required<Pick<PasskeyChallengeResponse, 'challenge'>> & PasskeyChallengeResponse> {
+    const response = await fetch(this.getPasskeyEndpoint('challenge'), {
+      credentials: 'include',
+    });
+    const payload = await this.parseJsonResponse<PasskeyChallengeResponse>(response);
+
+    if (!response.ok || payload.challenge == null || payload.challenge.trim() === '') {
+      throw new Error(this.getErrorMessage(payload.error, `Failed to create passkey challenge: ${response.status}`));
+    }
+
+    return { ...payload, challenge: payload.challenge };
+  }
+
+  private getPasskeyEndpoint(path: string): string {
+    return this.getRealmEndpoint(`passkey/${path}`);
+  }
+
+  private getAccountCredentialsEndpoint(): string {
+    return this.getRealmEndpoint('account/credentials');
+  }
+
+  private getRealmEndpoint(path: string): string {
+    const authServerUrl = this.config.keycloak.url.endsWith('/') ? this.config.keycloak.url : `${this.config.keycloak.url}/`;
+    const normalizedPath = path.replace(/^\/+/, '');
+    return new URL(`realms/${encodeURIComponent(this.config.keycloak.realm)}/${normalizedPath}`, authServerUrl).toString();
+  }
+
+  private async parseJsonResponse<T>(response: Response): Promise<T> {
+    return (await response.json().catch(() => ({}))) as T;
+  }
+
+  private getErrorMessage(errorMessage: string | undefined, fallback: string): string {
+    return errorMessage != null && errorMessage.trim() !== '' ? errorMessage : fallback;
+  }
+
+  private getFirstNonEmptyString(...values: unknown[]): string | null {
+    for (const value of values) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed !== '') {
+          return trimmed;
+        }
+      }
+    }
+    return null;
+  }
+
+  private toBase64Url(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  private fromBase64Url(value: string): ArrayBuffer {
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    return Uint8Array.from(atob(padded), character => character.charCodeAt(0)).buffer;
   }
 
   /**
