@@ -73,8 +73,11 @@ export class AuthFacadeService {
         // 2) Keycloak-Flow
         const keycloakInitialized = await this.keycloakAuthenticationService.init();
         if (keycloakInitialized) {
-          await this.accountService.loadUser();
           this.authMethod = 'keycloak';
+          await this.accountService.loadUser();
+          if (this.accountService.user() == null && this.keycloakAuthenticationService.isLoggedIn()) {
+            await this.accountService.loadUser();
+          }
 
           // Check if IdP registration to be done
           await this.handlePendingIdpRegistration();
