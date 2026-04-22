@@ -15,9 +15,12 @@ vi.mock('keycloak-js', () => ({
 describe('KeycloakAuthenticationService', () => {
   let service: KeycloakAuthenticationService;
   let keycloakInstance: KeycloakMock;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
     keycloakInstance = createKeycloakMock();
     TestBed.configureTestingModule({
       providers: [
@@ -33,6 +36,7 @@ describe('KeycloakAuthenticationService', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -284,6 +288,74 @@ describe('KeycloakAuthenticationService', () => {
 
       expect(clearIntervalSpy).toHaveBeenCalledOnce();
       clearIntervalSpy.mockRestore();
+    });
+  });
+
+  describe('passkey credentials', () => {
+    it('should list passkeys from keycloak account credentials', async () => {
+      keycloakInstance.authenticated = true;
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue([
+          {
+            type: 'password',
+            userCredentialMetadatas: [{ credential: { id: 'password-1', name: 'Password' } }],
+          },
+          {
+            type: 'webauthn-passwordless',
+            userCredentialMetadatas: [
+              { credential: { id: ' passkey-1 ', name: 'MacBook Pro', createdDate: 1_710_000_000_000 } },
+              { credential: null },
+            ],
+          },
+          {
+            type: 'webauthn',
+            userCredentialMetadatas: [{ credential: { id: 'passkey-2', userLabel: 'Backup key', createdDate: null } }],
+          },
+        ]),
+      });
+
+      await expect(service.listPasskeys()).resolves.toEqual([
+        { id: 'passkey-1', label: 'MacBook Pro', createdDate: 1_710_000_000_000 },
+        { id: 'passkey-2', label: 'Backup key', createdDate: null },
+      ]);
+      expect(fetchMock).toHaveBeenCalledWith('http://mock-keycloak/realms/mock-realm/account/credentials', {
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer mock-token',
+        },
+      });
+    });
+
+    it('should surface API errors when loading passkeys fails', async () => {
+      keycloakInstance.authenticated = true;
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: vi.fn().mockResolvedValue({ error: 'temporarily unavailable' }),
+      });
+
+      await expect(service.listPasskeys()).rejects.toThrow('temporarily unavailable');
+    });
+
+    it('should remove a passkey via the encoded account credential endpoint', async () => {
+      keycloakInstance.authenticated = true;
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 204,
+        json: vi.fn().mockResolvedValue({}),
+      });
+
+      await service.removePasskey('passkey/with slash');
+
+      expect(fetchMock).toHaveBeenCalledWith('http://mock-keycloak/realms/mock-realm/account/credentials/passkey%2Fwith%20slash', {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer mock-token',
+        },
+      });
     });
   });
 

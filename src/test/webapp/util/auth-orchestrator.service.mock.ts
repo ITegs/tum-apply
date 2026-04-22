@@ -7,6 +7,7 @@ export interface AuthOrchestratorServiceMock {
   email: WritableSignal<string>;
   firstName: WritableSignal<string>;
   lastName: WritableSignal<string>;
+  redirectUri: WritableSignal<string | null>;
   nextStep: ReturnType<typeof vi.fn>;
   authSuccess: ReturnType<typeof vi.fn>;
   clearError: () => void;
@@ -46,6 +47,7 @@ export function createAuthOrchestratorServiceMock(): AuthOrchestratorServiceMock
     email: signal<string>('user@example.com'),
     firstName: signal<string>('Jane'),
     lastName: signal<string>('Doe'),
+    redirectUri: signal<string | null>(null),
     nextStep: vi.fn(),
     authSuccess: vi.fn(),
     clearError: () => error.set(null),

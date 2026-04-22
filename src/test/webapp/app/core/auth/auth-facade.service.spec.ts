@@ -8,6 +8,7 @@ import { DocumentCacheService } from 'app/service/document-cache.service';
 import { createKeycloakMock, provideKeycloakMock } from 'util/keycloak.mock';
 import { vi } from 'vitest';
 import { provideMessageServiceMock } from 'util/message-service.mock';
+import { createToastServiceMock, provideToastServiceMock } from 'util/toast-service.mock';
 import { provideTranslateMock } from 'util/translate.mock';
 import {
   AuthOrchestratorServiceMock,
@@ -20,7 +21,12 @@ function setup() {
   const server = { refreshTokens: vi.fn(), login: vi.fn(), sendOtp: vi.fn(), verifyOtp: vi.fn(), logout: vi.fn() };
   const keycloak = Object.assign(createKeycloakMock(), {
     init: vi.fn(),
+    isLoggedIn: vi.fn(function (this: { authenticated: boolean }) {
+      return this.authenticated;
+    }),
     loginWithProvider: vi.fn(),
+    loginWithPasskey: vi.fn(),
+    registerPasskey: vi.fn(),
     logout: vi.fn(),
   });
   const account: AccountServiceMock = createAccountServiceMock();
@@ -28,6 +34,7 @@ function setup() {
   const orchestrator: AuthOrchestratorServiceMock = createAuthOrchestratorServiceMock();
   const docCache = { clear: vi.fn() };
   const router: RouterMock = createRouterMock();
+  const toast = createToastServiceMock();
 
   TestBed.configureTestingModule({
     providers: [
@@ -39,11 +46,12 @@ function setup() {
       provideAuthOrchestratorServiceMock(orchestrator),
       provideRouterMock(router),
       provideMessageServiceMock(),
+      provideToastServiceMock(toast),
       provideTranslateMock(),
     ],
   });
   const facade = TestBed.inject(AuthFacadeService);
-  return { facade, server, keycloak, account, orchestrator, docCache, router };
+  return { facade, server, keycloak, account, orchestrator, docCache, router, toast };
 }
 
 describe('AuthFacadeService', () => {
@@ -70,6 +78,32 @@ describe('AuthFacadeService', () => {
       const result = await facade.initAuth();
       expect(result).toBe(true);
       expect(keycloak.init).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries loading the user once after keycloak bootstrap when the first load is empty', async () => {
+      const { facade, server, keycloak, account } = setup();
+      server.refreshTokens.mockResolvedValue(false);
+      keycloak.init.mockResolvedValue(true);
+      keycloak.authenticated = true;
+      account.user.set(undefined);
+      account.loadUser.mockImplementation(async () => {
+        if (account.loadUser.mock.calls.length === 1) {
+          account.user.set(undefined);
+          return;
+        }
+        account.user.set({
+          id: 'u1',
+          name: 'First Login User',
+          email: 'first@login.test',
+          authorities: ['ROLE_USER'],
+        });
+      });
+
+      const result = await facade.initAuth();
+
+      expect(result).toBe(true);
+      expect(account.loadUser).toHaveBeenCalledTimes(2);
+      expect(account.user()?.email).toBe('first@login.test');
     });
 
     it('none returns false', async () => {
@@ -144,6 +178,41 @@ describe('AuthFacadeService', () => {
       await facade.loginWithProvider('google' as IdpProvider, '/home');
       expect(keycloak.loginWithProvider).toHaveBeenCalledWith('google', '/home');
       expect(keycloak.loginWithProvider).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('loginWithPasskey', () => {
+    it('stores an explicit redirect URI and delegates to keycloak', async () => {
+      const { facade, keycloak, orchestrator } = setup();
+      keycloak.loginWithPasskey.mockResolvedValue(undefined);
+
+      await facade.loginWithPasskey('/jobs/123');
+
+      expect(orchestrator.redirectUri()).toBe('/jobs/123');
+      expect(keycloak.loginWithPasskey).toHaveBeenCalledWith('/jobs/123');
+      expect(keycloak.loginWithPasskey).toHaveBeenCalledTimes(1);
+    });
+
+    it('reuses the existing redirect URI when none is provided', async () => {
+      const { facade, keycloak, orchestrator } = setup();
+      keycloak.loginWithPasskey.mockResolvedValue(undefined);
+      orchestrator.redirectUri.set('/dashboard');
+
+      await facade.loginWithPasskey();
+
+      expect(keycloak.loginWithPasskey).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  describe('registerPasskey', () => {
+    it('delegates to keycloak and shows a success toast', async () => {
+      const { facade, keycloak, toast } = setup();
+      keycloak.registerPasskey.mockResolvedValue(undefined);
+
+      await facade.registerPasskey();
+
+      expect(keycloak.registerPasskey).toHaveBeenCalledTimes(1);
+      expect(toast.showSuccessKey).toHaveBeenCalledWith('auth.common.toast.passkeyRegistered');
     });
   });
 
