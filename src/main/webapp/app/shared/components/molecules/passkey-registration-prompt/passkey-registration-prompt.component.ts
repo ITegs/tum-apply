@@ -14,7 +14,7 @@ import { TranslateDirective } from 'app/shared/language';
   templateUrl: './passkey-registration-prompt.component.html',
 })
 export class PasskeyRegistrationPromptComponent {
-  private static readonly PROMPT_DISMISSAL_STORAGE_KEY = 'auth.passkey.prompt.neverAskAgain';
+  private static readonly PROMPT_PREFERENCE_ID = 'ui_pref_hide_passkey_prompt';
 
   readonly accountService = inject(AccountService);
   readonly authFacade = inject(AuthFacadeService);
@@ -70,7 +70,7 @@ export class PasskeyRegistrationPromptComponent {
       this.loggedIn() &&
       this.keycloakAuthenticationService.isLoggedIn() &&
       !this.shownThisSession() &&
-      localStorage.getItem(PasskeyRegistrationPromptComponent.PROMPT_DISMISSAL_STORAGE_KEY) !== 'true'
+      localStorage.getItem(PasskeyRegistrationPromptComponent.PROMPT_PREFERENCE_ID) !== 'true'
     );
   }
 
@@ -95,6 +95,6 @@ export class PasskeyRegistrationPromptComponent {
     if (!this.neverAskAgain()) {
       return;
     }
-    localStorage.setItem(PasskeyRegistrationPromptComponent.PROMPT_DISMISSAL_STORAGE_KEY, 'true');
+    localStorage.setItem(PasskeyRegistrationPromptComponent.PROMPT_PREFERENCE_ID, 'true');
   }
 }
