@@ -444,7 +444,7 @@ export class KeycloakAuthenticationService {
   }
 
   private getPasskeyEndpoint(path: string): string {
-    return this.getRealmEndpoint(`passkey/${path}`);
+    return this.getRealmEndpoint(`passkey/${encodeURIComponent(this.config.keycloak.clientId)}/${path}`);
   }
 
   private getAccountCredentialsEndpoint(): string {

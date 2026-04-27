@@ -16,18 +16,31 @@ import { TranslateDirective } from 'app/shared/language';
 export class PasskeyRegistrationPromptComponent {
   private static readonly PASSKEY_PROMPT_NEVER_ASK_AGAIN_KEY = 'auth.passkey.prompt.neverAskAgain';
 
-  private readonly accountService = inject(AccountService);
-  private readonly authFacade = inject(AuthFacadeService);
-  private readonly keycloakAuthenticationService = inject(KeycloakAuthenticationService);
+  readonly accountService = inject(AccountService);
+  readonly authFacade = inject(AuthFacadeService);
+  readonly keycloakAuthenticationService = inject(KeycloakAuthenticationService);
 
   readonly loggedIn = computed(() => this.accountService.signedIn());
   readonly visible = signal(false);
   readonly neverAskAgain = signal(false);
   readonly busy = signal(false);
   private readonly shownThisSession = signal(false);
+  private readonly hasPasskeyConfigured = signal<boolean | null>(null);
+  private readonly checkingPasskeys = signal(false);
 
   constructor() {
     effect(() => {
+      if (!this.canEvaluatePrompt()) {
+        return;
+      }
+
+      if (this.hasPasskeyConfigured() === null) {
+        if (!this.checkingPasskeys()) {
+          void this.loadPasskeyConfiguration();
+        }
+        return;
+      }
+
       if (this.shouldShowPrompt()) {
         this.visible.set(true);
         this.shownThisSession.set(true);
@@ -46,18 +59,36 @@ export class PasskeyRegistrationPromptComponent {
     this.busy.set(true);
     try {
       await this.authFacade.registerPasskey();
+      this.hasPasskeyConfigured.set(true);
     } finally {
       this.busy.set(false);
     }
   }
 
-  private shouldShowPrompt(): boolean {
+  private canEvaluatePrompt(): boolean {
     return (
       this.loggedIn() &&
       this.keycloakAuthenticationService.isLoggedIn() &&
       !this.shownThisSession() &&
       localStorage.getItem(PasskeyRegistrationPromptComponent.PASSKEY_PROMPT_NEVER_ASK_AGAIN_KEY) !== 'true'
     );
+  }
+
+  private shouldShowPrompt(): boolean {
+    return this.canEvaluatePrompt() && this.hasPasskeyConfigured() === false;
+  }
+
+  private async loadPasskeyConfiguration(): Promise<void> {
+    this.checkingPasskeys.set(true);
+    try {
+      const passkeys = await this.keycloakAuthenticationService.listPasskeys();
+      this.hasPasskeyConfigured.set(passkeys.length > 0);
+    } catch {
+      // Do not show a setup prompt when passkey status cannot be determined.
+      this.hasPasskeyConfigured.set(true);
+    } finally {
+      this.checkingPasskeys.set(false);
+    }
   }
 
   private persistPreference(): void {
