@@ -284,26 +284,15 @@ export class KeycloakAuthenticationService {
       throw new Error(this.getErrorMessage(payloadError, `Failed to load passkeys: ${response.status}`));
     }
 
-    const credentials: AccountCredentialResponse[] = Array.isArray(payload)
-      ? payload.flatMap(credentialType => {
-          const type = (credentialType.type ?? '').toLowerCase();
-          if (!KeycloakAuthenticationService.PASSKEY_CREDENTIAL_TYPES.has(type)) {
-            return [];
-          }
-
-          return (credentialType.userCredentialMetadatas ?? []).flatMap(metadata =>
-            metadata.credential != null ? [metadata.credential] : [],
-          );
-        })
-      : (payload.credentials ?? []);
-
-    return credentials
-      .map(credential => ({
-        id: credential.id?.trim() ?? '',
-        label: credential.name ?? credential.userLabel ?? null,
-        createdDate: credential.createdDate ?? null,
-      }))
-      .filter(credential => credential.id !== '');
+    const credentials = this.extractPasskeyCredentials(payload);
+    const summaries: PasskeyCredentialSummary[] = [];
+    for (const credential of credentials) {
+      const summary = this.toPasskeySummary(credential);
+      if (summary !== null) {
+        summaries.push(summary);
+      }
+    }
+    return summaries;
   }
 
   async removePasskey(id: string): Promise<void> {
@@ -486,6 +475,41 @@ export class KeycloakAuthenticationService {
       }
     }
     return null;
+  }
+
+  private extractPasskeyCredentials(
+    payload: AccountCredentialTypeResponse[] | { credentials?: AccountCredentialResponse[]; error?: string },
+  ): AccountCredentialResponse[] {
+    if (!Array.isArray(payload)) {
+      return payload.credentials ?? [];
+    }
+
+    const credentials: AccountCredentialResponse[] = [];
+    for (const credentialType of payload) {
+      const type = (credentialType.type ?? '').toLowerCase();
+      if (!KeycloakAuthenticationService.PASSKEY_CREDENTIAL_TYPES.has(type)) {
+        continue;
+      }
+      for (const metadata of credentialType.userCredentialMetadatas ?? []) {
+        if (metadata.credential != null) {
+          credentials.push(metadata.credential);
+        }
+      }
+    }
+    return credentials;
+  }
+
+  private toPasskeySummary(credential: AccountCredentialResponse): PasskeyCredentialSummary | null {
+    const id = credential.id?.trim() ?? '';
+    if (id === '') {
+      return null;
+    }
+
+    return {
+      id,
+      label: credential.name ?? credential.userLabel ?? null,
+      createdDate: credential.createdDate ?? null,
+    };
   }
 
   private toBase64Url(buffer: ArrayBuffer): string {

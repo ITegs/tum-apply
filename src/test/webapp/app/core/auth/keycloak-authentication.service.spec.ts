@@ -294,26 +294,24 @@ describe('KeycloakAuthenticationService', () => {
   describe('passkey credentials', () => {
     it('should list passkeys from keycloak account credentials', async () => {
       keycloakInstance.authenticated = true;
+      const credentialsPayload = [
+        {
+          type: 'password',
+          userCredentialMetadatas: [{ credential: { id: 'password-1', name: 'Password' } }],
+        },
+        {
+          type: 'webauthn-passwordless',
+          userCredentialMetadatas: [{ credential: { id: ' passkey-1 ', name: 'MacBook Pro', createdDate: 1_710_000_000_000 } }, { credential: null }],
+        },
+        {
+          type: 'webauthn',
+          userCredentialMetadatas: [{ credential: { id: 'passkey-2', userLabel: 'Backup key', createdDate: null } }],
+        },
+      ];
       fetchMock.mockResolvedValue({
         ok: true,
         status: 200,
-        json: vi.fn().mockResolvedValue([
-          {
-            type: 'password',
-            userCredentialMetadatas: [{ credential: { id: 'password-1', name: 'Password' } }],
-          },
-          {
-            type: 'webauthn-passwordless',
-            userCredentialMetadatas: [
-              { credential: { id: ' passkey-1 ', name: 'MacBook Pro', createdDate: 1_710_000_000_000 } },
-              { credential: null },
-            ],
-          },
-          {
-            type: 'webauthn',
-            userCredentialMetadatas: [{ credential: { id: 'passkey-2', userLabel: 'Backup key', createdDate: null } }],
-          },
-        ]),
+        json: vi.fn().mockResolvedValue(credentialsPayload),
       });
 
       await expect(service.listPasskeys()).resolves.toEqual([
