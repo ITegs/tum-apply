@@ -232,7 +232,7 @@ export class KeycloakAuthenticationService {
     const credential = (await navigator.credentials.create({
       publicKey: {
         challenge: this.fromBase64Url(challenge.challenge),
-        rp: { name: 'TUMApply', id: window.location.hostname },
+        rp: { name: 'TUM AET', id: window.location.hostname },
         user: { id: userIdBytes.buffer, name: accountName, displayName },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
         authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
