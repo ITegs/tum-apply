@@ -334,7 +334,7 @@ export class AuthFacadeService {
       detail: this.translate.instant(`${this.translationKey}.authenticationFailed.detail`),
     },
     lastAction = false,
-    errorMessageOverride?: (error: unknown) => ToastMessageInput | undefined,
+    errorMessageOverride?: (_error: unknown) => ToastMessageInput | undefined,
   ): Promise<T> {
     if (this.authOrchestrator.isBusy()) {
       throw new Error('AuthOrchestrator is busy');
