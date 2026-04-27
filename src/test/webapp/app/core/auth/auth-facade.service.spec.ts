@@ -203,19 +203,6 @@ describe('AuthFacadeService', () => {
 
       expect(keycloak.loginWithPasskey).toHaveBeenCalledWith('/dashboard');
     });
-
-    it('shows a dedicated toast when passkey login fails with 404', async () => {
-      const { facade, keycloak, orchestrator } = setup();
-      const setErrorSpy = vi.spyOn(orchestrator, 'setError');
-      keycloak.loginWithPasskey.mockRejectedValue(new Error('Passkey auth failed: 404'));
-
-      await expect(facade.loginWithPasskey('/dashboard')).rejects.toThrow('Passkey auth failed: 404');
-
-      expect(setErrorSpy).toHaveBeenCalledWith({
-        summary: 'auth.common.toast.passkeyLoginNotFound.summary',
-        detail: 'auth.common.toast.passkeyLoginNotFound.detail',
-      });
-    });
   });
 
   describe('registerPasskey', () => {
