@@ -57,6 +57,7 @@ function setup() {
 describe('AuthFacadeService', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   describe('initAuth', () => {
