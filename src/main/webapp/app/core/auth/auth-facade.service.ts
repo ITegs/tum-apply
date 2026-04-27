@@ -194,6 +194,14 @@ export class AuthFacadeService {
         summary: this.translate.instant(`${this.translationKey}.passkeyLoginFailed.summary`),
         detail: this.translate.instant(`${this.translationKey}.passkeyLoginFailed.detail`),
       },
+      false,
+      error =>
+        this.isPasskeyNotFoundError(error)
+          ? {
+              summary: this.translate.instant(`${this.translationKey}.passkeyLoginNotFound.summary`),
+              detail: this.translate.instant(`${this.translationKey}.passkeyLoginNotFound.detail`),
+            }
+          : undefined,
     );
   }
 
@@ -326,6 +334,7 @@ export class AuthFacadeService {
       detail: this.translate.instant(`${this.translationKey}.authenticationFailed.detail`),
     },
     lastAction = false,
+    errorMessageOverride?: (error: unknown) => ToastMessageInput | undefined,
   ): Promise<T> {
     if (this.authOrchestrator.isBusy()) {
       throw new Error('AuthOrchestrator is busy');
@@ -339,10 +348,14 @@ export class AuthFacadeService {
       }
       return response;
     } catch (e) {
-      this.authOrchestrator.setError(errorMessage);
+      this.authOrchestrator.setError(errorMessageOverride?.(e) ?? errorMessage);
       throw e;
     } finally {
       this.authOrchestrator.isBusy.set(false);
     }
+  }
+
+  private isPasskeyNotFoundError(error: unknown): boolean {
+    return error instanceof Error && /\b404\b/.test(error.message);
   }
 }
