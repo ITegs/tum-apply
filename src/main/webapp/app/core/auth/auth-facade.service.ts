@@ -198,6 +198,11 @@ export class AuthFacadeService {
     );
   }
 
+  /**
+   * Registers a new passkey for the currently logged-in user.
+   * Note: This also requires a custom Keycloak SPI endpoint and won't work with a standard Keycloak setup out-of-the-box.
+   * After successful registration, a success toast is shown. Any errors during the process will be captured and rethrown.
+   */
   async registerPasskey(): Promise<void> {
     return this.runAuthAction(
       async () => {

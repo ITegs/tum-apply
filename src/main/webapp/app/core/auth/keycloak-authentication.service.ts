@@ -172,6 +172,11 @@ export class KeycloakAuthenticationService {
 
   // --------------------------- Passkey ----------------------------
 
+  /**
+   * Performs a login flow using WebAuthn passkeys.
+   * Optionally redirects to the specified URI after successful login.
+   * @param redirectUri Optional URI to redirect to after login. Defaults to the app root.
+   */
   async loginWithPasskey(redirectUri?: string): Promise<void> {
     this.assertPasskeySupport();
 
@@ -205,7 +210,7 @@ export class KeycloakAuthenticationService {
         challenge: challenge.challenge,
       }),
     });
-    const authenticatePayload = await this.parseJsonResponse<{ error?: string }>(authenticateResponse);
+    const authenticatePayload = (await authenticateResponse.json().catch(() => ({}))) as { error?: string };
 
     if (!authenticateResponse.ok) {
       throw new Error(this.getErrorMessage(authenticatePayload.error, `Passkey auth failed: ${authenticateResponse.status}`));
@@ -214,6 +219,10 @@ export class KeycloakAuthenticationService {
     window.location.replace(this.buildRedirectUri(redirectUri));
   }
 
+  /**
+   * Performs a passkey registration flow to add a new passkey credential to the user's account.
+   * Requires the user to be authenticated with Keycloak beforehand, as it uses the current session for authorization.
+   */
   async registerPasskey(): Promise<void> {
     this.assertPasskeySupport();
 
@@ -267,6 +276,11 @@ export class KeycloakAuthenticationService {
     }
   }
 
+  /**
+   * Fetches the list of registered passkey credentials for the authenticated user.
+   *
+   * @returns An array of passkey credential summaries.
+   */
   async listPasskeys(): Promise<PasskeyCredentialSummary[]> {
     const token = await this.getAuthenticatedToken();
     const response = await fetch(this.getAccountCredentialsEndpoint(), {
@@ -275,9 +289,9 @@ export class KeycloakAuthenticationService {
         Authorization: `Bearer ${token}`,
       },
     });
-    const payload = await this.parseJsonResponse<
-      AccountCredentialTypeResponse[] | { credentials?: AccountCredentialResponse[]; error?: string }
-    >(response);
+    const payload = (await response.json().catch(() => ({}))) as
+      | AccountCredentialTypeResponse[]
+      | { credentials?: AccountCredentialResponse[]; error?: string };
 
     if (!response.ok) {
       const payloadError = !Array.isArray(payload) ? payload.error : undefined;
@@ -287,14 +301,22 @@ export class KeycloakAuthenticationService {
     const credentials = this.extractPasskeyCredentials(payload);
     const summaries: PasskeyCredentialSummary[] = [];
     for (const credential of credentials) {
-      const summary = this.toPasskeySummary(credential);
-      if (summary !== null) {
-        summaries.push(summary);
+      const id = credential.id?.trim() ?? '';
+      if (id !== '') {
+        summaries.push({
+          id,
+          label: credential.name ?? credential.userLabel ?? null,
+          createdDate: credential.createdDate ?? null,
+        });
       }
     }
     return summaries;
   }
 
+  /**
+   * Removes a registered passkey credential from the user's account.
+   * @param id
+   */
   async removePasskey(id: string): Promise<void> {
     const token = await this.getAuthenticatedToken();
     const response = await fetch(`${this.getAccountCredentialsEndpoint()}/${encodeURIComponent(id)}`, {
@@ -304,7 +326,7 @@ export class KeycloakAuthenticationService {
         Authorization: `Bearer ${token}`,
       },
     });
-    const payload = await this.parseJsonResponse<{ error?: string }>(response);
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
 
     if (!response.ok) {
       throw new Error(this.getErrorMessage(payload.error, `Failed to remove passkey: ${response.status}`));
@@ -415,12 +437,13 @@ export class KeycloakAuthenticationService {
     this.windowListenersActive = false;
   }
 
+  /** Throws an error if the current browser does not support WebAuthn passkeys. */
   private assertPasskeySupport(): void {
     if (typeof PublicKeyCredential === 'undefined') {
       throw new Error('Passkeys are not supported in this browser');
     }
   }
-
+  /** Gets the current token if authenticated, otherwise throws an error. */
   private async getAuthenticatedToken(): Promise<string> {
     await this.ensureFreshToken();
     const token = this.keycloak?.token;
@@ -429,12 +452,12 @@ export class KeycloakAuthenticationService {
     }
     return token;
   }
-
+  /** Requests a passkey challenge from the server, throwing an error if the request fails or the response is invalid. */
   private async getPasskeyChallenge(): Promise<Required<Pick<PasskeyChallengeResponse, 'challenge'>> & PasskeyChallengeResponse> {
     const response = await fetch(this.getPasskeyEndpoint('challenge'), {
       credentials: 'include',
     });
-    const payload = await this.parseJsonResponse<PasskeyChallengeResponse>(response);
+    const payload = (await response.json().catch(() => ({}))) as PasskeyChallengeResponse;
 
     if (!response.ok || payload.challenge == null || payload.challenge.trim() === '') {
       throw new Error(this.getErrorMessage(payload.error, `Failed to create passkey challenge: ${response.status}`));
@@ -443,6 +466,7 @@ export class KeycloakAuthenticationService {
     return { ...payload, challenge: payload.challenge };
   }
 
+  /** Endpoint builders */
   private getPasskeyEndpoint(path: string): string {
     return this.getRealmEndpoint(`passkey/${encodeURIComponent(this.config.keycloak.clientId)}/${path}`);
   }
@@ -455,10 +479,6 @@ export class KeycloakAuthenticationService {
     const authServerUrl = this.config.keycloak.url.endsWith('/') ? this.config.keycloak.url : `${this.config.keycloak.url}/`;
     const normalizedPath = path.replace(/^\/+/, '');
     return new URL(`realms/${encodeURIComponent(this.config.keycloak.realm)}/${normalizedPath}`, authServerUrl).toString();
-  }
-
-  private async parseJsonResponse<T>(response: Response): Promise<T> {
-    return (await response.json().catch(() => ({}))) as T;
   }
 
   private getErrorMessage(errorMessage: string | undefined, fallback: string): string {
@@ -477,6 +497,7 @@ export class KeycloakAuthenticationService {
     return null;
   }
 
+  /** Extracts webauthn credentials from the given payload */
   private extractPasskeyCredentials(
     payload: AccountCredentialTypeResponse[] | { credentials?: AccountCredentialResponse[]; error?: string },
   ): AccountCredentialResponse[] {
@@ -497,19 +518,6 @@ export class KeycloakAuthenticationService {
       }
     }
     return credentials;
-  }
-
-  private toPasskeySummary(credential: AccountCredentialResponse): PasskeyCredentialSummary | null {
-    const id = credential.id?.trim() ?? '';
-    if (id === '') {
-      return null;
-    }
-
-    return {
-      id,
-      label: credential.name ?? credential.userLabel ?? null,
-      createdDate: credential.createdDate ?? null,
-    };
   }
 
   private toBase64Url(buffer: ArrayBuffer): string {
