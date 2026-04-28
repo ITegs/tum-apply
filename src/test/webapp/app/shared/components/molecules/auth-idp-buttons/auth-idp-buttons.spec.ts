@@ -63,9 +63,12 @@ describe('AuthIdpButtons', () => {
 
     expect(component.onlyIcons()).toBe(false);
 
-    expect(config.buttons).toHaveLength(2);
+    expect(config.buttons).toHaveLength(3);
 
-    const [appleButton, googleButton] = config.buttons;
+    const [tumButton, appleButton, googleButton] = config.buttons;
+
+    expect(tumButton.label).toBe('TUM');
+    expect(tumButton.icon).toBe('tum');
 
     expect(appleButton.label).toBe('Apple');
     expect(appleButton.icon).toBe('apple');
@@ -92,9 +95,12 @@ describe('AuthIdpButtons', () => {
 
     expect(component.onlyIcons()).toBe(true);
 
-    expect(config.buttons).toHaveLength(2);
+    expect(config.buttons).toHaveLength(3);
 
-    const [appleButton, googleButton] = config.buttons;
+    const [tumButton, appleButton, googleButton] = config.buttons;
+
+    expect(tumButton.label).toBeUndefined();
+    expect(tumButton.icon).toBe('tum');
 
     expect(appleButton.label).toBeUndefined();
     expect(appleButton.icon).toBe('apple');
@@ -103,21 +109,23 @@ describe('AuthIdpButtons', () => {
     expect(googleButton.icon).toBe('google');
   });
 
-  it('should call authFacadeService.loginWithProvider for Apple and Google with current origin', () => {
+  it('should call authFacadeService.loginWithProvider for TUM, Apple and Google with current origin', () => {
     const fixture = createComponent();
     const component = fixture.componentInstance;
 
     const origin = window.location.origin;
     const config = component.idpButtons();
 
-    expect(config.buttons).toHaveLength(2);
+    expect(config.buttons).toHaveLength(3);
 
-    const [appleButton, googleButton] = config.buttons;
+    const [tumButton, appleButton, googleButton] = config.buttons;
 
+    tumButton.onClick();
     appleButton.onClick();
     googleButton.onClick();
 
-    expect(authFacadeMock.loginWithProvider).toHaveBeenNthCalledWith(1, IdpProvider.Apple, origin, false);
+    expect(authFacadeMock.loginWithProvider).toHaveBeenNthCalledWith(1, IdpProvider.TUM, origin, false);
+    expect(authFacadeMock.loginWithProvider).toHaveBeenNthCalledWith(2, IdpProvider.Apple, origin, false);
     expect(authFacadeMock.loginWithProvider).toHaveBeenLastCalledWith(IdpProvider.Google, origin, false);
   });
 });
