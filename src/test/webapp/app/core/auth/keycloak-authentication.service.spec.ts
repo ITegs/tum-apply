@@ -301,7 +301,10 @@ describe('KeycloakAuthenticationService', () => {
         },
         {
           type: 'webauthn-passwordless',
-          userCredentialMetadatas: [{ credential: { id: ' passkey-1 ', name: 'MacBook Pro', createdDate: 1_710_000_000_000 } }, { credential: null }],
+          userCredentialMetadatas: [
+            { credential: { id: ' passkey-1 ', name: 'MacBook Pro', createdDate: 1_710_000_000_000 } },
+            { credential: null },
+          ],
         },
         {
           type: 'webauthn',

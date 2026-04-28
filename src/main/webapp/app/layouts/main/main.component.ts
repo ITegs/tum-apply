@@ -18,14 +18,7 @@ import PageRibbonComponent from '../profiles/page-ribbon.component';
   templateUrl: './main.component.html',
   styleUrl: './main.component.scss',
   providers: [AppPageTitleStrategy],
-  imports: [
-    HeaderComponent,
-    RouterOutlet,
-    SidebarComponent,
-    FooterComponent,
-    PageRibbonComponent,
-    PasskeyRegistrationPromptComponent,
-  ],
+  imports: [HeaderComponent, RouterOutlet, SidebarComponent, FooterComponent, PageRibbonComponent, PasskeyRegistrationPromptComponent],
 })
 export default class MainComponent {
   readonly accountService = inject(AccountService);
